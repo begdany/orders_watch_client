@@ -1,21 +1,47 @@
 use serde::Serialize; // Используется для сериализации данных в JSON-объект
 use std::io::{Read, Write}; // Используются для чтения/записи даных сетевого соединения
 use std::net::TcpStream; // Используется для TCP-соединения с сервером
+use tokio_postgres::{NoTls, Error}; // Используется для работы с базой данных
+use std::env; // Модуль env применяется для настройки отображения сообщений логирования
 
 // Определяем структуру, содержащую данные о товаре
 #[derive(Serialize)]
 struct ItemData {
     brand: String,
     name: String,
-    price: u32,
+    price: i64,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+
+    env::set_var("RUST_LOG", "info"); // Включаем отображение сообщений лога
+    env_logger::init(); // Инициализируем систему логирования env_logger
+
+    // Подключаемся к базе данных
+    let (client, connection) =
+        tokio_postgres::connect("host=localhost user=postgres password=1", NoTls).await?;
+    log::info!("Подключение к базе данных...");
+
+    // Запускаем соединение в отдельном асинхронном потоке
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            log::error!("Ошибка подключения: {}", e);
+        } else {
+            log::info!("Подключение прошло успешно.");
+        }
+    });
+
+    // Выполняем запрос к базе данных
+    let row = client
+        .query_one("SELECT brand, name, price FROM data WHERE id = $1", &[&1])
+        .await?;
+
     // Создаем экземпляр структуры
     let data = ItemData {
-        brand: "Outleap".to_string(),
-        name: "RUDEWAY CRM2".to_string(),
-        price: 93307,
+        brand: row.get("brand"),
+        name: row.get("name"),
+        price: row.get("price"),
     };
 
     // Сериализуем объект data в JSON
@@ -38,11 +64,14 @@ fn main() {
 
     // Отправляем запрос
     stream.write_all(request.as_bytes()).unwrap();
+    log::info!("Отправлен запрос на сервер.");
 
     // Читаем ответ
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
 
     // Выводим ответ в консоль
-    println!("Ответ от сервера:\n{}", response);
+    log::info!("Получен ответ от сервера:\n{}", response);
+
+    Ok(())
 }
