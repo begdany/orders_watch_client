@@ -3,6 +3,7 @@ use std::io::{Read, Write}; // Используются для чтения/за
 use std::net::TcpStream; // Используется для TCP-соединения с сервером
 use tokio_postgres::{NoTls, Error}; // Используется для работы с базой данных
 use std::env; // Модуль env применяется для настройки отображения сообщений логирования
+use rand::Rng;
 
 // Определяем структуру, содержащую данные о товаре
 #[derive(Serialize)]
@@ -10,6 +11,7 @@ struct ItemData {
     brand: String,
     name: String,
     price: i64,
+    id: u8,
 }
 
 #[tokio::main]
@@ -37,11 +39,13 @@ async fn main() -> Result<(), Error> {
         .query_one("SELECT brand, name, price FROM data WHERE id = $1", &[&1])
         .await?;
 
+
     // Создаем экземпляр структуры
     let data = ItemData {
         brand: row.get("brand"),
         name: row.get("name"),
         price: row.get("price"),
+        id: rand::thread_rng().gen_range(0..255),
     };
 
     // Сериализуем объект data в JSON
